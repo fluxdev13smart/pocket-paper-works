@@ -101,7 +101,7 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
   const out = await PDFDocument.create();
   const keep = Array.from({ length: s.pageCount }, (_, i) => i + 1).filter((p) => !s.excluded.includes(p));
   const toPng = async (c: HTMLCanvasElement) =>
-    new Uint8Array(await (await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"))).arrayBuffer());
+    new Uint8Array<ArrayBuffer>(await (await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"))).arrayBuffer());
   for (let k = 0; k < keep.length; k++) {
     const p = keep[k]!;
     const ops = s.ops[p] ?? [];
@@ -139,5 +139,5 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
   }
   out.setProducer("AnyConvert Local");
   out.setCreator("AnyConvert Local");
-  return new Blob([await out.save()], { type: "application/pdf" });
+  return new Blob([(await out.save()) as BlobPart], { type: "application/pdf" });
 }

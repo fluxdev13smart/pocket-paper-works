@@ -68,7 +68,7 @@ function Studio({ doc }: { doc: PDFDocumentProxy | null }) {
     const io = new IntersectionObserver(
       (entries) => {
         const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (vis) setCurrent(Number((vis.target as HTMLElement).dataset.page));
+        if (vis) setCurrent(Number((vis.target as HTMLElement).dataset['page']));
       },
       { threshold: [0.25, 0.5, 0.75] },
     );

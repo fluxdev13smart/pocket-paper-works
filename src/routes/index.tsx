@@ -31,8 +31,8 @@ interface Item {
   target: string;
   status: "ready" | "converting" | "done" | "error";
   progress: number;
-  output?: Output;
-  error?: string;
+  output?: Output | undefined;
+  error?: string | undefined;
 }
 
 const ACCEPT: Record<string, string> = {
@@ -273,7 +273,7 @@ function QueueRow({
   disabled: boolean;
   onTarget: (t: string) => void;
   onRemove: () => void;
-  onEdit?: () => void;
+  onEdit?: (() => void) | undefined;
   onRetry: () => void;
 }) {
   const ext = extOf(it.file.name).toUpperCase().slice(0, 4) || "FILE";

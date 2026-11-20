@@ -107,7 +107,7 @@ async function imagesToPdf(canvases: HTMLCanvasElement[]) {
     const page = doc.addPage([c.width * 0.75, c.height * 0.75]);
     page.drawImage(jpg, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
   }
-  return new Blob([await doc.save()], { type: "application/pdf" });
+  return new Blob([(await doc.save()) as BlobPart], { type: "application/pdf" });
 }
 
 async function convertImage(file: File, t: string): Promise<Blob> {
@@ -438,7 +438,7 @@ async function textToPdf(text: string) {
     page.drawText(l, { x: margin, y, size, font });
     y -= size * 1.45;
   }
-  return new Blob([await doc.save()], { type: "application/pdf" });
+  return new Blob([(await doc.save()) as BlobPart], { type: "application/pdf" });
 }
 
 async function convertText(file: File, t: string): Promise<Blob> {
