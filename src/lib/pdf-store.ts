@@ -38,6 +38,7 @@ export const pdfStore = {
     set(empty);
   },
   toggleExcluded(page: number) {
+    if (!Number.isInteger(page) || page < 1 || page > state.pageCount) return;
     const ex = state.excluded.includes(page) ? state.excluded.filter((p) => p !== page) : [...state.excluded, page];
     if (ex.length >= state.pageCount) return; // keep at least one page
     set({ excluded: ex });
@@ -84,7 +85,8 @@ export function drawOps(ctx: CanvasRenderingContext2D, ops: Op[], w: number, h: 
     if (op.tool === "highlighter") ctx.globalCompositeOperation = "multiply";
     ctx.beginPath();
     op.points.forEach(([x, y], i) => (i ? ctx.lineTo(x * w, y * h) : ctx.moveTo(x * w, y * h)));
-    if (op.points.length === 1) ctx.lineTo(op.points[0]![0] * w + 0.1, op.points[0]![1] * h);
+    const first = op.points[0];
+    if (op.points.length === 1 && first) ctx.lineTo(first[0] * w + 0.1, first[1] * h);
     ctx.stroke();
     ctx.restore();
   }
@@ -100,10 +102,12 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
   const view = await openPdf(s.bytes);
   const out = await PDFDocument.create();
   const keep = Array.from({ length: s.pageCount }, (_, i) => i + 1).filter((p) => !s.excluded.includes(p));
+  try {
   const toPng = async (c: HTMLCanvasElement) =>
-    new Uint8Array<ArrayBuffer>(await (await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"))).arrayBuffer());
+    new Uint8Array(await (await new Promise<Blob>((resolve, reject) => c.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PDF image encoding failed.")), "image/png"))).arrayBuffer());
   for (let k = 0; k < keep.length; k++) {
-    const p = keep[k]!;
+    const p = keep[k];
+    if (p === undefined) continue;
     const ops = s.ops[p] ?? [];
     const hasCut = ops.some((o) => o.kind === "rect");
     const page = await view.getPage(p);
@@ -114,7 +118,8 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
       const c = document.createElement("canvas");
       c.width = Math.floor(v2.width);
       c.height = Math.floor(v2.height);
-      const ctx = c.getContext("2d")!;
+      const ctx = c.getContext("2d");
+      if (!ctx) throw new Error("Unable to render this page.");
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, c.width, c.height);
       await page.render({ canvas: c, canvasContext: ctx, viewport: v2 }).promise;
@@ -124,12 +129,15 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
       np.drawImage(img, { x: 0, y: 0, width: vp.width, height: vp.height });
     } else {
       const [copied] = await out.copyPages(src, [p - 1]);
-      const np = out.addPage(copied!);
+      if (!copied) throw new Error("Unable to copy this page.");
+      const np = out.addPage(copied);
       if (ops.length) {
         const c = document.createElement("canvas");
         c.width = Math.floor(vp.width * 2.5);
         c.height = Math.floor(vp.height * 2.5);
-        drawOps(c.getContext("2d")!, ops, c.width, c.height);
+        const ctx = c.getContext("2d");
+        if (!ctx) throw new Error("Unable to render annotations.");
+        drawOps(ctx, ops, c.width, c.height);
         const img = await out.embedPng(await toPng(c));
         const { width, height } = np.getSize();
         np.drawImage(img, { x: 0, y: 0, width, height });
@@ -140,4 +148,5 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
   out.setProducer("AnyConvert Local");
   out.setCreator("AnyConvert Local");
   return new Blob([(await out.save()) as BlobPart], { type: "application/pdf" });
+  } finally { await view.loadingTask.destroy(); }
 }

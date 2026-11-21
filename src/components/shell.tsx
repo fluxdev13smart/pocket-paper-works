@@ -1,6 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { ArrowLeftRight, Download, FileStack, Scissors, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
@@ -14,9 +15,13 @@ export function useInstallPrompt() {
       setEvt(e as InstallEvent);
     };
     window.addEventListener("beforeinstallprompt", on);
-    window.addEventListener("appinstalled", () => setInstalled(true));
+    const onInstalled = () => setInstalled(true);
+    window.addEventListener("appinstalled", onInstalled);
     if (window.matchMedia("(display-mode: standalone)").matches) setInstalled(true);
-    return () => window.removeEventListener("beforeinstallprompt", on);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", on);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
   return {
     canInstall: !!evt && !installed,
@@ -52,11 +57,11 @@ export function Header() {
   ] as const;
   return (
     <header className="px-4 pt-6 md:px-16">
-      <div className="mx-auto flex h-14 max-w-[1000px] items-center justify-between gap-4 rounded-full border border-white/10 bg-card/80 pl-5 pr-2 shadow-[0_20px_50px_-25px_rgba(0,0,0,.8)] backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-[1000px] items-center justify-between gap-4 rounded-full border border-hairline bg-card/80 pl-5 pr-2 shadow-[0_20px_50px_-25px_rgba(0,0,0,.8)] backdrop-blur">
         <Brand />
         <span className="hidden items-center gap-2 rounded-full border border-primary/40 bg-accent px-3.5 py-1.5 text-[12px] text-primary lg:flex">
           <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-          Zero Network Requests • 100% In-Browser RAM
+          Zero File Uploads • 100% In-Browser RAM
         </span>
         <nav className="flex items-center gap-1">
           {nav.map((n) => (
@@ -70,12 +75,12 @@ export function Header() {
             </Link>
           ))}
           {canInstall && (
-            <button
+            <Button variant="unstyled" size="unstyled"
               onClick={install}
               className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-accent px-3.5 py-2 text-[12px] font-bold text-primary"
             >
               <Download className="h-3.5 w-3.5" /> Install Offline App
-            </button>
+            </Button>
           )}
         </nav>
       </div>
@@ -93,7 +98,7 @@ export function TabDock() {
   ] as const;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
-      <nav className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-card/90 p-1.5 shadow-kit backdrop-blur">
+      <nav className="pointer-events-auto flex items-center gap-1 rounded-full border border-hairline bg-card/90 p-1.5 shadow-kit backdrop-blur">
         {tabs.map((t) => {
           const active = loc.pathname === t.to;
           return (

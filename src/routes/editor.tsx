@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { downloadBlob } from "@/lib/download";
 import { baseName } from "@/lib/formats";
 import { drawOps, exportEditedPdf, pdfStore, usePdfStore, type Op, type Tool } from "@/lib/pdf-store";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/editor")({
@@ -95,38 +96,38 @@ function Studio({ doc }: { doc: PDFDocumentProxy | null }) {
   return (
     <div className="min-h-screen pb-40">
       <header className="sticky top-0 z-30 px-3 pt-5 md:px-8">
-        <div className="mx-auto flex h-14 max-w-[1216px] items-center justify-between gap-3 rounded-full border border-white/10 bg-card/85 pl-5 pr-1.5 shadow-[0_20px_50px_-25px_rgba(0,0,0,.8)] backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-[1216px] items-center justify-between gap-3 rounded-full border border-hairline bg-card/85 pl-5 pr-1.5 shadow-[0_20px_50px_-25px_rgba(0,0,0,.8)] backdrop-blur">
           <div className="flex min-w-0 items-center gap-3">
             <Link to="/" title="Back to Convert" className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-secondary text-[10px] text-muted-foreground hover:text-foreground">
               PDF
             </Link>
             <span className="kit-display truncate text-[16px] font-bold text-foreground">{s.name}</span>
-            <button onClick={() => pdfStore.close()} title="Close document" className="shrink-0 text-muted-foreground hover:text-foreground">
+            <Button variant="unstyled" size="unstyled" onClick={() => pdfStore.close()} title="Close document" className="shrink-0 text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
           <div className="hidden items-center gap-2 md:flex">
-            <div className="flex items-center rounded-full border border-white/10 px-1">
-              <button aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))} className="px-3 py-1.5 text-muted-foreground hover:text-foreground">
+            <div className="flex items-center rounded-full border border-hairline px-1">
+              <Button variant="unstyled" size="unstyled" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))} className="px-3 py-1.5 text-muted-foreground hover:text-foreground">
                 −
-              </button>
+              </Button>
               <span className="tabular w-12 text-center font-mono text-[13px] text-foreground">{Math.round(zoom * 100)}%</span>
-              <button aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))} className="px-3 py-1.5 text-muted-foreground hover:text-foreground">
+              <Button variant="unstyled" size="unstyled" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))} className="px-3 py-1.5 text-muted-foreground hover:text-foreground">
                 +
-              </button>
+              </Button>
             </div>
-            <span className="rounded-full border border-white/10 px-4 py-1.5 text-[13px] text-muted-foreground">
+            <span className="rounded-full border border-hairline px-4 py-1.5 text-[13px] text-muted-foreground">
               Page <b className="tabular text-foreground">{counterIndex}</b> of {pages.length}
             </span>
-            <button onClick={() => setDrawer(true)} className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-1.5 text-[13px] text-foreground hover:bg-secondary">
+            <Button variant="unstyled" size="unstyled" onClick={() => setDrawer(true)} className="flex items-center gap-2 rounded-full border border-hairline px-4 py-1.5 text-[13px] text-foreground hover:bg-secondary">
               <LayoutGrid className="h-3.5 w-3.5" /> Pages
-            </button>
+            </Button>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setDrawer(true)} aria-label="Pages" className="grid h-9 w-9 place-items-center rounded-full border border-white/10 text-foreground md:hidden">
+            <Button variant="unstyled" size="unstyled" onClick={() => setDrawer(true)} aria-label="Pages" className="grid h-9 w-9 place-items-center rounded-full border border-hairline text-foreground md:hidden">
               <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
+            </Button>
+            <Button variant="unstyled" size="unstyled"
               onClick={doExport}
               disabled={exporting !== null || !doc}
               className="flex items-center gap-3 rounded-full bg-primary py-1.5 pl-5 pr-1.5 text-[13px] font-bold text-primary-foreground disabled:opacity-60 sm:pl-6"
@@ -135,7 +136,7 @@ function Studio({ doc }: { doc: PDFDocumentProxy | null }) {
               <span className="grid h-8 w-8 place-items-center rounded-full bg-primary-foreground/10">
                 {exporting !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               </span>
-            </button>
+            </Button>
           </div>
         </div>
       </header>
@@ -148,7 +149,7 @@ function Studio({ doc }: { doc: PDFDocumentProxy | null }) {
         ) : (
           pages.map((p) => (
             <div key={p} ref={(el) => void (pageRefs.current[p] = el)} data-page={p}>
-              <PdfPage doc={doc} page={p} zoom={zoom} tool={tool} color={color} size={SIZES[size]!} ops={s.ops[p] ?? []} />
+              <PdfPage doc={doc} page={p} zoom={zoom} tool={tool} color={color} size={SIZES[size] ?? 0.004} ops={s.ops[p] ?? []} />
             </div>
           ))
         )}
@@ -160,7 +161,7 @@ function Studio({ doc }: { doc: PDFDocumentProxy | null }) {
         <SheetContent side="right" className="w-[340px] border-hairline bg-card sm:max-w-[340px]">
           <SheetHeader>
             <SheetTitle className="kit-display text-foreground">Pages</SheetTitle>
-            <p className="text-[13px] text-muted-foreground">Tap a page to remove it from the export. Double-tap to jump to it.</p>
+            <p className="text-[13px] text-muted-foreground">Included pages</p>
           </SheetHeader>
           <div className="grid grid-cols-2 gap-4 overflow-y-auto px-4 pb-8">
             {doc &&
@@ -192,16 +193,26 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
   const base = useRef<HTMLCanvasElement>(null);
   const over = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(644);
   const [visible, setVisible] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const draft = useRef<Op | null>(null);
   const erasing = useRef<string[]>([]);
 
   useEffect(() => {
+    const resize = () => setViewportWidth(window.innerWidth);
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     void doc.getPage(page).then((p) => {
       const vp = p.getViewport({ scale: 1 });
-      setDims({ w: vp.width, h: vp.height });
-    });
+      if (active) setDims({ w: vp.width, h: vp.height });
+    }).catch(() => {});
+    return () => { active = false; };
   }, [doc, page]);
 
   useEffect(() => {
@@ -212,23 +223,26 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
     return () => io.disconnect();
   }, [dims]);
 
-  const cssW = dims ? Math.min(dims.w * zoom * (620 / 612), 4000) : 620;
+  const cssW = dims ? Math.min(620, viewportWidth - 24) * zoom : Math.min(620, viewportWidth - 24);
   const cssH = dims ? (cssW * dims.h) / dims.w : 800;
 
   useEffect(() => {
     if (!visible || !dims || !base.current) return;
     let task: { cancel: () => void; promise: Promise<void> } | null = null;
+    let active = true;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     void doc.getPage(page).then((p) => {
       const c = base.current;
-      if (!c) return;
+      if (!c || !active) return;
       const vp = p.getViewport({ scale: (cssW * dpr) / dims.w });
       c.width = Math.floor(vp.width);
       c.height = Math.floor(vp.height);
-      task = p.render({ canvas: c, canvasContext: c.getContext("2d")!, viewport: vp });
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      task = p.render({ canvas: c, canvasContext: ctx, viewport: vp });
       task.promise.catch(() => {});
-    });
-    return () => task?.cancel();
+    }).catch(() => {});
+    return () => { active = false; task?.cancel(); };
   }, [visible, dims, doc, page, cssW]);
 
   const redraw = useCallback(() => {
@@ -237,7 +251,8 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     c.width = Math.floor(cssW * dpr);
     c.height = Math.floor(cssH * dpr);
-    const ctx = c.getContext("2d")!;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
     const shown = ops.filter((o) => !erasing.current.includes(o.id));
     const all = draft.current ? [...shown, draft.current] : shown;
     drawOps(ctx, all, c.width, c.height);
@@ -252,7 +267,7 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
   useEffect(redraw, [redraw]);
 
   const pt = (e: React.PointerEvent): [number, number] => {
-    const r = over.current!.getBoundingClientRect();
+    const r = e.currentTarget.getBoundingClientRect();
     return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
   };
 
@@ -269,7 +284,7 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
 
   const down = (e: React.PointerEvent) => {
     if (tool === "select") return;
-    over.current!.setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     const [x, y] = pt(e);
     if (tool === "eraser") {
       erasing.current = [...new Set([...erasing.current, ...hit(x, y)])];
@@ -278,7 +293,7 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
       (draft.current as Op & { ox?: number; oy?: number }).ox = x;
       (draft.current as Op & { oy?: number }).oy = y;
     } else {
-      draft.current = { id: crypto.randomUUID(), kind: "stroke", tool, color: tool === "highlighter" && color === "#EF4444" ? color : color, size, points: [[x, y]] };
+      draft.current = { id: crypto.randomUUID(), kind: "stroke", tool, color: color, size, points: [[x, y]] };
     }
     redraw();
   };
@@ -287,11 +302,11 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
     const [x, y] = pt(e);
     const d = draft.current as (Op & { ox?: number; oy?: number }) | null;
     if (tool === "eraser") erasing.current = [...new Set([...erasing.current, ...hit(x, y)])];
-    else if (d?.kind === "rect") {
-      d.x = Math.min(x, d.ox!);
-      d.y = Math.min(y, d.oy!);
-      d.w = Math.abs(x - d.ox!);
-      d.h = Math.abs(y - d.oy!);
+    else if (d?.kind === "rect" && d.ox !== undefined && d.oy !== undefined) {
+      d.x = Math.min(x, d.ox);
+      d.y = Math.min(y, d.oy);
+      d.w = Math.abs(x - d.ox);
+      d.h = Math.abs(y - d.oy);
     } else if (d?.kind === "stroke") d.points.push([x, y]);
     redraw();
   };
@@ -323,7 +338,7 @@ function PdfPage({ doc, page, zoom, tool, color, size, ops }: { doc: PDFDocument
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
-        onPointerCancel={up}
+        onPointerCancel={() => { draft.current = null; erasing.current = []; redraw(); }}
       />
     </div>
   );
@@ -358,9 +373,9 @@ function MarkupDock({
   const custom = !SWATCHES.includes(color.toUpperCase());
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex flex-col items-center gap-3 px-2">
-      <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-white/10 bg-card/95 p-1.5 shadow-kit backdrop-blur">
+      <div className="pointer-events-auto flex max-w-full flex-wrap justify-center items-center gap-1 rounded-[24px] sm:rounded-full border border-hairline bg-card/95 p-1.5 shadow-kit backdrop-blur">
         {tools.map((t) => (
-          <button
+          <Button variant="unstyled" size="unstyled"
             key={t.id}
             title={t.label}
             aria-label={t.label}
@@ -369,15 +384,15 @@ function MarkupDock({
             className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors", tool === t.id ? "bg-accent text-primary" : "text-muted-foreground hover:text-foreground")}
           >
             <t.icon className="h-4 w-4" />
-          </button>
+          </Button>
         ))}
-        <span className="mx-1.5 h-6 w-px shrink-0 bg-white/10" />
+        <span className="mx-1.5 h-6 w-px shrink-0 bg-secondary" />
         {SWATCHES.map((c) => (
-          <button
+          <Button variant="unstyled" size="unstyled"
             key={c}
             aria-label={`Color ${c}`}
             onClick={() => setColor(c)}
-            className={cn("h-7 w-7 shrink-0 rounded-full border border-white/15", color.toUpperCase() === c && "ring-2 ring-foreground ring-offset-2 ring-offset-card")}
+            className={cn("h-7 w-7 shrink-0 rounded-full border border-input", color.toUpperCase() === c && "ring-2 ring-foreground ring-offset-2 ring-offset-card")}
             style={{ background: c }}
           />
         ))}
@@ -385,29 +400,29 @@ function MarkupDock({
           title="Color wheel"
           className={cn("relative h-7 w-7 shrink-0 cursor-pointer overflow-hidden rounded-full color-wheel", custom && "ring-2 ring-foreground ring-offset-2 ring-offset-card")}
         >
-          {custom && <span className="absolute inset-[7px] rounded-full border border-white/40" style={{ background: color }} />}
+          {custom && <span className="absolute inset-[7px] rounded-full border border-foreground/40" style={{ background: color }} />}
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Pick any color" />
         </label>
-        <span className="mx-1.5 h-6 w-px shrink-0 bg-white/10" />
+        <span className="mx-1.5 h-6 w-px shrink-0 bg-secondary" />
         {[0, 1, 2].map((i) => (
-          <button
+          <Button variant="unstyled" size="unstyled"
             key={i}
             aria-label={["Thin", "Medium", "Thick"][i]}
             onClick={() => setSize(i)}
-            className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full", size === i ? "bg-white/10" : "hover:bg-white/5")}
+            className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full", size === i ? "bg-secondary" : "hover:bg-secondary")}
           >
             <span className={cn("rounded-full", size === i ? "bg-foreground" : "bg-muted-foreground")} style={{ width: 4 + i * 4, height: 4 + i * 4 }} />
-          </button>
+          </Button>
         ))}
-        <span className="mx-1.5 h-6 w-px shrink-0 bg-white/10" />
-        <button aria-label="Undo" disabled={!canUndo} onClick={pdfStore.undo} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30">
+        <span className="mx-1.5 h-6 w-px shrink-0 bg-secondary" />
+        <Button variant="unstyled" size="unstyled" aria-label="Undo" disabled={!canUndo} onClick={pdfStore.undo} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30">
           <Undo2 className="h-4 w-4" />
-        </button>
-        <button aria-label="Redo" disabled={!canRedo} onClick={pdfStore.redo} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30">
+        </Button>
+        <Button variant="unstyled" size="unstyled" aria-label="Redo" disabled={!canRedo} onClick={pdfStore.redo} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30">
           <Redo2 className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground">Scroll freely • Annotations render directly onto client-side canvas</p>
+
     </div>
   );
 }

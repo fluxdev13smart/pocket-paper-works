@@ -7,6 +7,7 @@ import { convertFile, type Output } from "@/lib/convert";
 import { downloadBlob } from "@/lib/download";
 import { categoryOf, engineFor, extOf, formatBytes, targetsFor, type Category, type Target } from "@/lib/formats";
 import { pdfStore } from "@/lib/pdf-store";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -59,11 +60,12 @@ function Home() {
     for (const file of list) {
       const cat = categoryOf(file);
       const targets = targetsFor(cat, extOf(file.name));
-      if (!targets.length) {
+      const firstTarget = targets[0];
+      if (!firstTarget) {
         skipped++;
         continue;
       }
-      next.push({ id: crypto.randomUUID(), file, cat, targets, target: targets[0]!.id, status: "ready", progress: 0 });
+      next.push({ id: crypto.randomUUID(), file, cat, targets, target: firstTarget.id, status: "ready", progress: 0 });
     }
     if (skipped) toast.error(`${skipped} file${skipped > 1 ? "s" : ""} skipped — that format can't be converted locally yet.`);
     setItems((xs) => [...xs, ...next]);
@@ -76,7 +78,8 @@ function Home() {
   };
 
   const convertOne = async (it: Item) => {
-    const t = it.targets.find((x) => x.id === it.target)!;
+    const t = it.targets.find((x) => x.id === it.target);
+    if (!t) return;
     update(it.id, { status: "converting", progress: 0, error: undefined });
     try {
       const output = await convertFile(it.file, t.id, t.ext, (p) => update(it.id, { progress: p }));
@@ -88,23 +91,28 @@ function Home() {
 
   const convertAll = async () => {
     setRunning(true);
-    for (const it of items.filter((x) => x.status !== "done")) await convertOne(it);
-    setRunning(false);
+    try {
+      for (const it of items.filter((x) => x.status !== "done")) await convertOne(it);
+    } finally { setRunning(false); }
   };
 
   const downloadZip = async () => {
-    const done = items.filter((x) => x.output);
-    if (done.length === 1) return downloadBlob(done[0]!.output!.blob, done[0]!.output!.name);
-    const JSZip = (await import("jszip")).default;
-    const zip = new JSZip();
-    const used = new Set<string>();
-    for (const d of done) {
-      let n = d.output!.name;
-      for (let i = 2; used.has(n); i++) n = d.output!.name.replace(/(\.[^.]+)$/, `-${i}$1`);
-      used.add(n);
-      zip.file(n, d.output!.blob);
-    }
-    downloadBlob(await zip.generateAsync({ type: "blob", compression: "STORE" }), "anyconvert-local.zip");
+    const done = items.flatMap((x) => x.output ? [x.output] : []);
+    const first = done[0];
+    if (!first) return;
+    if (done.length === 1) return downloadBlob(first.blob, first.name);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const used = new Set<string>();
+      for (const output of done) {
+        let n = output.name;
+        for (let i = 2; used.has(n); i++) n = output.name.replace(/(\.[^.]+)$/, `-${i}$1`);
+        used.add(n);
+        zip.file(n, output.blob);
+      }
+      downloadBlob(await zip.generateAsync({ type: "blob", compression: "STORE" }), "anyconvert-local.zip");
+    } catch { toast.error("Couldn't create the download. Try downloading files individually."); }
   };
 
   const openInEditor = async (file: File) => {
@@ -113,6 +121,7 @@ function Home() {
       const { openPdf } = await import("@/lib/pdfjs");
       const doc = await openPdf(bytes);
       pdfStore.load(file.name, bytes, doc.numPages);
+      await doc.loadingTask.destroy();
       navigate({ to: "/editor" });
     } catch {
       toast.error("This PDF is corrupt or password-protected.");
@@ -132,7 +141,7 @@ function Home() {
             Private, in-browser file transformation
           </h1>
           <p className="mx-auto mt-4 max-w-[560px] text-[16px] leading-relaxed text-muted-foreground">
-            Your files never leave your device. Processed entirely inside your browser via WebAssembly.
+            Your files never leave your device. Processed entirely inside your browser. No file uploads.
           </p>
         </section>
 
@@ -168,7 +177,7 @@ function Home() {
               drag ? "border-primary bg-primary/10" : "border-primary/35 bg-primary/[0.05] hover:bg-primary/[0.08]",
             )}
           >
-            <div className={cn("mx-auto grid h-12 w-12 place-items-center rounded-full border transition-transform", drag ? "scale-110 border-primary" : "border-white/15")}>
+            <div className={cn("mx-auto grid h-12 w-12 place-items-center rounded-full border transition-transform", drag ? "scale-110 border-primary" : "border-input")}>
               <Upload className="h-4 w-4 text-primary" />
             </div>
             <p className="mt-4 text-[18px] text-foreground">{drag ? "Release to load into memory" : "Drop files to load into browser memory"}</p>
@@ -177,9 +186,9 @@ function Home() {
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               {Object.keys(ACCEPT).map((chip) => {
-                const on = CHIP_CAT[chip]!.some((c) => present.has(c)) || (items.length === 0 && chip === "Images");
+                const on = CHIP_CAT[chip]?.some((c) => present.has(c)) || (items.length === 0 && chip === "Images");
                 return (
-                  <button
+                  <Button variant="unstyled" size="unstyled"
                     key={chip}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -187,11 +196,11 @@ function Home() {
                     }}
                     className={cn(
                       "rounded-full border px-3.5 py-1.5 text-[13px] transition-colors",
-                      on ? "border-primary/50 bg-accent text-primary" : "border-white/10 text-muted-foreground hover:text-foreground",
+                      on ? "border-primary/50 bg-accent text-primary" : "border-hairline text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {chip}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -202,9 +211,9 @@ function Home() {
           <div className="flex items-center justify-between">
             <h2 className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Local queue</h2>
             {items.length > 0 && (
-              <button disabled={running} onClick={() => setItems([])} className="text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-40">
+              <Button variant="unstyled" size="unstyled" disabled={running} onClick={() => setItems([])} className="text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-40">
                 Clear
-              </button>
+              </Button>
             )}
           </div>
 
@@ -223,7 +232,7 @@ function Home() {
                   onTarget={(target) => update(it.id, { target, status: "ready", output: undefined, progress: 0 })}
                   onRemove={() => setItems((xs) => xs.filter((x) => x.id !== it.id))}
                   onEdit={it.cat === "pdf" ? () => openInEditor(it.file) : undefined}
-                  onRetry={() => convertOne(it)}
+                  onRetry={async () => { setRunning(true); try { await convertOne(it); } finally { setRunning(false); } }}
                 />
               ))}
             </ul>
@@ -234,23 +243,23 @@ function Home() {
               <span className="font-sans font-bold text-foreground">{formatBytes(total)}</span> in RAM
             </p>
             <div className="flex flex-wrap gap-3">
-              <button
+              <Button variant="unstyled" size="unstyled"
                 onClick={downloadZip}
                 disabled={!doneCount || running}
-                className="rounded-full border border-white/15 px-5 py-3 text-[14px] text-foreground transition-colors hover:bg-secondary disabled:opacity-40"
+                className="rounded-full border border-input px-5 py-3 text-[14px] text-foreground transition-colors hover:bg-secondary disabled:opacity-40"
               >
                 Download ZIP
-              </button>
-              <button
+              </Button>
+              <Button variant="unstyled" size="unstyled"
                 onClick={convertAll}
                 disabled={!pending || running}
-                className="flex items-center gap-3 rounded-full bg-primary py-1.5 pl-6 pr-1.5 text-[14px] font-bold text-primary-foreground transition-transform hover:-translate-y-px disabled:opacity-50"
+                className="flex whitespace-normal items-center gap-3 rounded-full bg-primary py-1.5 pl-6 pr-1.5 text-[14px] font-bold text-primary-foreground transition-transform hover:-translate-y-px disabled:opacity-50"
               >
                 {running ? "Converting locally…" : `Convert All Locally (${pending} file${pending === 1 ? "" : "s"})`}
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-primary-foreground/10">
                   {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
                 </span>
-              </button>
+              </Button>
             </div>
           </div>
         </section>
@@ -278,23 +287,23 @@ function QueueRow({
 }) {
   const ext = extOf(it.file.name).toUpperCase().slice(0, 4) || "FILE";
   return (
-    <li className="group grid grid-cols-[36px_1fr_auto] items-center gap-x-4 gap-y-2 rounded-xl py-3.5 md:grid-cols-[36px_1fr_160px_170px_110px]">
-      <span className="grid h-9 w-9 place-items-center rounded-lg bg-secondary text-[10px] text-muted-foreground">{ext}</span>
-      <div className="min-w-0">
+    <li className="group grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-xl py-3.5 md:grid-cols-[36px_minmax(0,1fr)_160px_170px_90px]">
+      <span className="grid h-9 w-9 place-items-center rounded-lg bg-secondary text-[10px] md:col-start-1 md:row-start-1 text-muted-foreground">{ext}</span>
+      <div className="min-w-0 md:col-start-2 md:row-start-1">
         <p className="truncate text-[15px] text-foreground">{it.file.name}</p>
         <p className="tabular font-mono text-[11px] text-muted-foreground">
           {formatBytes(it.file.size)}
           {it.output && <> → {formatBytes(it.output.blob.size)}</>}
         </p>
       </div>
-      <div className="col-span-3 col-start-2 md:col-span-1 md:col-start-auto md:row-start-1 md:[grid-column:3]">
+      <div className="col-span-2 col-start-2 md:col-span-1 md:col-start-3 md:row-start-1">
         <div className="relative">
           <select
             value={it.target}
             disabled={disabled || it.status === "converting"}
             onChange={(e) => onTarget(e.target.value)}
             aria-label={`Convert ${it.file.name} to`}
-            className="w-full appearance-none rounded-lg border border-white/15 bg-background px-3 py-2 pr-8 text-[14px] text-foreground outline-none focus:border-primary"
+            className="w-full appearance-none rounded-lg border border-input bg-background px-3 py-2 pr-8 text-[14px] text-foreground outline-none focus:border-primary"
           >
             {it.targets.map((t) => (
               <option key={t.id} value={t.id}>
@@ -305,43 +314,43 @@ function QueueRow({
           <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         </div>
       </div>
-      <p className="col-start-2 text-[12px] text-primary md:col-start-auto md:row-start-1 md:[grid-column:4]">{engineFor(it.cat, it.target)}</p>
-      <div className="col-start-3 row-start-1 flex items-center justify-end gap-2 text-[13px] md:[grid-column:5]">
-        <Status it={it} onRetry={onRetry} />
+      <p className="col-start-2 text-[12px] text-primary md:col-start-4 md:row-start-1">{engineFor(it.cat, it.target)}</p>
+      <div className="col-start-3 row-start-1 flex items-center justify-end gap-2 text-[13px] md:col-start-5">
+        <Status it={it} onRetry={onRetry} disabled={disabled} />
         {onEdit && it.status !== "converting" && (
-          <button onClick={onEdit} title="Open in PDF editor" className="text-muted-foreground hover:text-primary">
+          <Button variant="unstyled" size="unstyled" disabled={disabled} onClick={onEdit} title="Open in PDF editor" className="text-muted-foreground hover:text-primary">
             <FilePen className="h-4 w-4" />
-          </button>
+          </Button>
         )}
         {it.status !== "converting" && (
-          <button onClick={onRemove} disabled={disabled} title="Remove" className="text-muted-foreground hover:text-foreground disabled:opacity-30">
+          <Button variant="unstyled" size="unstyled" onClick={onRemove} disabled={disabled} title="Remove" className="text-muted-foreground hover:text-foreground disabled:opacity-30">
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         )}
       </div>
       {it.status === "converting" && (
-        <div className="col-span-3 col-start-2 h-1 overflow-hidden rounded-full bg-secondary md:col-span-4">
+        <div className="col-span-2 col-start-2 h-1 overflow-hidden rounded-full bg-secondary md:col-span-4">
           <div className="h-full bg-primary transition-[width]" style={{ width: `${Math.round(it.progress * 100)}%` }} />
         </div>
       )}
-      {it.status === "error" && <p className="col-span-3 col-start-2 text-[12px] text-destructive md:col-span-4">{it.error}</p>}
+      {it.status === "error" && <p className="col-span-2 col-start-2 text-[12px] text-destructive md:col-span-4">{it.error}</p>}
     </li>
   );
 }
 
-function Status({ it, onRetry }: { it: Item; onRetry: () => void }) {
+function Status({ it, onRetry, disabled }: { it: Item; onRetry: () => void; disabled: boolean }) {
   if (it.status === "converting") return <span className="tabular font-mono text-primary">{Math.round(it.progress * 100)}%</span>;
-  if (it.status === "done")
+  if (it.status === "done" && it.output)
     return (
-      <button onClick={() => downloadBlob(it.output!.blob, it.output!.name)} className="flex items-center gap-1 text-primary hover:underline">
+      <Button variant="unstyled" size="unstyled" onClick={() => downloadBlob(it.output?.blob ?? new Blob(), it.output?.name ?? "converted")} className="flex items-center gap-1 text-primary hover:underline">
         <Check className="h-3.5 w-3.5" /> <Download className="h-3.5 w-3.5" />
-      </button>
+      </Button>
     );
   if (it.status === "error")
     return (
-      <button onClick={onRetry} className="flex items-center gap-1 text-destructive">
+      <Button variant="unstyled" size="unstyled" onClick={onRetry} disabled={disabled} className="flex items-center gap-1 text-destructive">
         <AlertTriangle className="h-3.5 w-3.5" /> Retry
-      </button>
+      </Button>
     );
   return <span className="text-foreground">Ready</span>;
 }

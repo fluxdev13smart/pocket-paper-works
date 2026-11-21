@@ -5,6 +5,11 @@ export interface Output {
   name: string;
 }
 type Progress = (p: number) => void;
+function context2d(c: HTMLCanvasElement, options?: CanvasRenderingContext2DSettings) {
+  const ctx = c.getContext("2d", options);
+  if (!ctx) throw new Error("This browser cannot create a drawing canvas.");
+  return ctx;
+}
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 async function loadImage(file: Blob): Promise<HTMLImageElement> {
@@ -35,7 +40,7 @@ function imageToCanvas(img: HTMLImageElement, opaque: boolean, size?: number) {
     c.width = w;
     c.height = h;
   }
-  const ctx = c.getContext("2d")!;
+  const ctx = context2d(c);
   if (opaque) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, c.width, c.height);
@@ -49,7 +54,7 @@ function imageToCanvas(img: HTMLImageElement, opaque: boolean, size?: number) {
 
 function encodeBMP(c: HTMLCanvasElement): Blob {
   const { width: w, height: h } = c;
-  const data = c.getContext("2d")!.getImageData(0, 0, w, h).data;
+  const data = context2d(c).getImageData(0, 0, w, h).data;
   const row = Math.ceil((w * 3) / 4) * 4;
   const size = 54 + row * h;
   const buf = new ArrayBuffer(size);
@@ -68,9 +73,9 @@ function encodeBMP(c: HTMLCanvasElement): Blob {
     const o = 54 + (h - 1 - y) * row;
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
-      out[o + x * 3] = data[i + 2]!;
-      out[o + x * 3 + 1] = data[i + 1]!;
-      out[o + x * 3 + 2] = data[i]!;
+      out[o + x * 3] = (data[i + 2] ?? 0);
+      out[o + x * 3 + 1] = (data[i + 1] ?? 0);
+      out[o + x * 3 + 2] = (data[i] ?? 0);
     }
   }
   return new Blob([buf], { type: "image/bmp" });
@@ -145,6 +150,7 @@ async function convertPdf(file: File, t: string, onP: Progress): Promise<Blob> {
   } catch {
     throw new Error("This PDF is corrupt or password-protected.");
   }
+  try {
   if (t === "txt") {
     let text = "";
     for (let i = 1; i <= pdf.numPages; i++) {
@@ -166,7 +172,7 @@ async function convertPdf(file: File, t: string, onP: Progress): Promise<Blob> {
     const c = document.createElement("canvas");
     c.width = Math.floor(vp.width);
     c.height = Math.floor(vp.height);
-    const ctx = c.getContext("2d")!;
+    const ctx = context2d(c);
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, c.width, c.height);
     await page.render({ canvas: c, canvasContext: ctx, viewport: vp }).promise;
@@ -174,7 +180,8 @@ async function convertPdf(file: File, t: string, onP: Progress): Promise<Blob> {
     c.width = c.height = 0;
     onP(i / pdf.numPages);
   }
-  return zip.generateAsync({ type: "blob", compression: "STORE" });
+  return await zip.generateAsync({ type: "blob", compression: "STORE" });
+  } finally { await pdf.loadingTask.destroy(); }
 }
 
 async function decodeAudio(file: File): Promise<AudioBuffer> {
@@ -212,7 +219,7 @@ function encodeWav(buf: AudioBuffer): Blob {
   let o = 44;
   for (let i = 0; i < len; i++)
     for (let c = 0; c < ch; c++) {
-      const s = Math.max(-1, Math.min(1, chans[c]![i]!));
+      const s = Math.max(-1, Math.min(1, (chans[c]?.[i] ?? 0)));
       v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
       o += 2;
     }
@@ -226,7 +233,7 @@ async function encodeMp3(buf: AudioBuffer, kbps: number, onP: Progress): Promise
   const toI16 = (f: Float32Array) => {
     const o = new Int16Array(f.length);
     for (let i = 0; i < f.length; i++) {
-      const s = Math.max(-1, Math.min(1, f[i]!));
+      const s = Math.max(-1, Math.min(1, (f[i] ?? 0)));
       o[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
     return o;
@@ -259,16 +266,22 @@ async function loadVideo(file: File) {
   v.muted = true;
   v.playsInline = true;
   v.preload = "auto";
-  v.src = URL.createObjectURL(file);
-  await new Promise<void>((res, rej) => {
-    v.onloadeddata = () => res();
-    v.onerror = () => rej(new Error("This browser can't decode this video file."));
-  });
+  const url = URL.createObjectURL(file);
+  try {
+    await new Promise<void>((res, rej) => {
+      const timer = setTimeout(() => rej(new Error("Video loading timed out. Try another format.")), 20000);
+      v.onloadeddata = () => { clearTimeout(timer); res(); };
+      v.onerror = () => { clearTimeout(timer); rej(new Error("This browser can't decode this video file.")); };
+      v.src = url;
+    });
+  } catch (error) { URL.revokeObjectURL(url); throw error; }
   return v;
 }
 
 async function recordVideo(file: File, t: string, onP: Progress): Promise<Blob> {
   const v = await loadVideo(file);
+  try {
+  if (!v.captureStream || typeof MediaRecorder === "undefined") throw new Error("Video recording is not supported in this browser. Try extracting a frame instead.");
   const mime =
     t === "mp4"
       ? MediaRecorder.isTypeSupported("video/mp4;codecs=avc1")
@@ -281,16 +294,24 @@ async function recordVideo(file: File, t: string, onP: Progress): Promise<Blob> 
   const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  const done = new Promise<void>((r) => (rec.onstop = () => r()));
+  const done = new Promise<void>((resolve, reject) => {
+    rec.onstop = () => resolve();
+    rec.onerror = () => reject(new Error("Video encoding failed."));
+  });
   v.muted = false;
   v.volume = 0.0001;
   v.ontimeupdate = () => onP(v.duration ? v.currentTime / v.duration : 0);
   v.onended = () => rec.stop();
   rec.start(1000);
-  await v.play();
-  await done;
-  URL.revokeObjectURL(v.src);
-  return new Blob(chunks, { type: mime.split(";")[0] });
+  try {
+    await v.play();
+    await done;
+    return new Blob(chunks, { type: mime.split(";")[0] ?? "video/webm" });
+  } finally {
+    if (rec.state !== "inactive") rec.stop();
+    stream.getTracks().forEach((track) => track.stop());
+  }
+  } finally { v.pause(); URL.revokeObjectURL(v.src); v.removeAttribute("src"); v.load(); }
 }
 
 async function videoFrame(file: File): Promise<HTMLCanvasElement> {
@@ -298,7 +319,7 @@ async function videoFrame(file: File): Promise<HTMLCanvasElement> {
   const c = document.createElement("canvas");
   c.width = v.videoWidth;
   c.height = v.videoHeight;
-  c.getContext("2d")!.drawImage(v, 0, 0);
+  context2d(c).drawImage(v, 0, 0);
   URL.revokeObjectURL(v.src);
   return c;
 }
@@ -312,19 +333,26 @@ async function videoGif(file: File, onP: Progress): Promise<Blob> {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  const ctx = context2d(c, { willReadFrequently: true });
   const frames: Uint8ClampedArray[] = [];
   const dur = Math.min(5, v.duration || 5);
   const fps = 10;
+  try {
   for (let i = 0; i < dur * fps; i++) {
-    v.currentTime = i / fps;
-    await new Promise((r) => (v.onseeked = r));
+    const time = i / fps;
+    if (Math.abs(v.currentTime - time) > 0.001) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Video frame seeking timed out.")), 10000);
+        v.onseeked = () => { clearTimeout(timer); resolve(); };
+        v.currentTime = time;
+      });
+    }
     ctx.drawImage(v, 0, 0, w, h);
     frames.push(ctx.getImageData(0, 0, w, h).data);
     onP((i / (dur * fps)) * 0.6);
   }
-  URL.revokeObjectURL(v.src);
-  return encodeGif(frames, w, h, 100 / fps, (p) => onP(0.6 + p * 0.4));
+  return await encodeGif(frames, w, h, 100 / fps, (p) => onP(0.6 + p * 0.4));
+  } finally { URL.revokeObjectURL(v.src); v.removeAttribute("src"); v.load(); }
 }
 
 async function convertVideo(file: File, t: string, onP: Progress) {
@@ -340,7 +368,7 @@ function csvParse(text: string): string[][] {
   let cell = "";
   let q = false;
   for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
+    const ch = (text[i] ?? "");
     if (q) {
       if (ch === '"' && text[i + 1] === '"') {
         cell += '"';
@@ -381,7 +409,7 @@ function htmlToMd(html: string) {
     if (!(n instanceof Element)) return "";
     const inner = [...n.childNodes].map(walk).join("");
     const tag = n.tagName.toLowerCase();
-    if (/^h[1-6]$/.test(tag)) return `\n${"#".repeat(+tag[1]!)} ${inner.trim()}\n\n`;
+    if (/^h[1-6]$/.test(tag)) return `\n${"#".repeat(Number(tag[1] ?? 1))} ${inner.trim()}\n\n`;
     if (tag === "p") return `\n${inner.trim()}\n\n`;
     if (tag === "strong" || tag === "b") return `**${inner}**`;
     if (tag === "em" || tag === "i") return `*${inner}*`;
@@ -400,10 +428,10 @@ function toCsv(data: unknown): string {
   const keys = [...new Set(arr.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
   const cell = (v: unknown) => {
     const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [
-    keys.join(","),
+    keys.map(cell).join(","),
     ...arr.map((r) => keys.map((k) => cell(r && typeof r === "object" ? (r as Record<string, unknown>)[k] : r)).join(",")),
   ].join("\n");
 }
