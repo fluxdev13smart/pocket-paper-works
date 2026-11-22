@@ -7,15 +7,15 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function usePdfDoc(bytes: Uint8Array | null) {
-  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const [loaded, setLoaded] = useState<{ bytes: Uint8Array; doc: PDFDocumentProxy } | null>(null);
   useEffect(() => {
-    setDoc(null);
+    setLoaded(null);
     if (!bytes) return;
     let alive = true;
     let d: PDFDocumentProxy | null = null;
     import("@/lib/pdfjs").then(async ({ openPdf }) => {
       d = await openPdf(bytes);
-      if (alive) setDoc(d);
+      if (alive) setLoaded({ bytes, doc: d });
       else { void d.loadingTask.destroy(); d = null; }
     }).catch(() => {
       if (alive) { toast.error("Couldn’t render this PDF. Please reopen it."); pdfStore.close(); }
@@ -25,7 +25,7 @@ export function usePdfDoc(bytes: Uint8Array | null) {
       void d?.loadingTask.destroy();
     };
   }, [bytes]);
-  return doc;
+  return loaded?.bytes === bytes ? loaded.doc : null;
 }
 
 export async function loadPdfFile(file: File) {
@@ -77,7 +77,7 @@ export function OpenPdf({ title, hint }: { title: string; hint: string }) {
             if (f) void loadPdfFile(f);
           }}
           className={cn(
-            "w-full rounded-[22px] border border-dashed px-6 py-14 text-center transition-colors",
+            "block whitespace-normal w-full rounded-[22px] border border-dashed px-6 py-14 text-center transition-colors",
             drag ? "border-primary bg-primary/10" : "border-primary/35 bg-primary/[0.05] hover:bg-primary/[0.08]",
           )}
         >
@@ -102,6 +102,7 @@ export function PageThumb({
   onToggle,
   onOpen,
   width = 150,
+  disabled = false,
 }: {
   doc: PDFDocumentProxy;
   page: number;
@@ -109,6 +110,7 @@ export function PageThumb({
   onToggle: () => void;
   onOpen?: () => void;
   width?: number;
+  disabled?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -132,6 +134,7 @@ export function PageThumb({
   return (
     <div className="flex flex-col items-center gap-2">
       <Button variant="unstyled" size="unstyled"
+        disabled={disabled}
         onClick={onToggle}
         aria-pressed={!excluded}
         aria-label={`${excluded ? "Include" : "Exclude"} page ${page}`}
@@ -151,7 +154,7 @@ export function PageThumb({
           {!excluded && <Check className="h-3 w-3" />}
         </span>
       </Button>
-      {onOpen && <Button variant="ghost" size="sm" disabled={excluded} onClick={onOpen} aria-label={`Go to page ${page}`}>Go to page</Button>}
+      {onOpen && <Button variant="ghost" size="sm" disabled={excluded || disabled} onClick={onOpen} aria-label={`Go to page ${page}`}>Go to page</Button>}
       <span className="tabular font-mono text-[11px] text-muted-foreground">
         {page}
         {excluded && " · removed"}

@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from "react";
+import { clearCutoutImages, cutoutImage, prepareCutout, type CutoutClipboard, type Region } from "./pdf-cutout";
 
-export type Tool = "select" | "cut" | "marker" | "highlighter" | "eraser";
+export type Tool = "select" | "cut" | "marker" | "highlighter" | "eraser" | "lift" | "paste";
 
 export type Op =
   | { id: string; kind: "stroke"; tool: "marker" | "highlighter"; color: string; size: number; points: [number, number][] }
+  | ({ id: string; kind: "image"; data: string } & Region)
   | { id: string; kind: "rect"; x: number; y: number; w: number; h: number };
 
 /** Coordinates are normalized 0..1 relative to the page so they survive zoom. */
@@ -15,9 +17,10 @@ export interface PdfState {
   ops: Record<number, Op[]>;
   past: Record<number, Op[]>[];
   future: Record<number, Op[]>[];
+  clipboard: CutoutClipboard | null;
 }
 
-const empty: PdfState = { name: null, bytes: null, pageCount: 0, excluded: [], ops: {}, past: [], future: [] };
+const empty: PdfState = { name: null, bytes: null, pageCount: 0, excluded: [], ops: {}, past: [], future: [], clipboard: null };
 let state: PdfState = empty;
 const subs = new Set<() => void>();
 const set = (s: Partial<PdfState>) => {
@@ -32,9 +35,11 @@ export const pdfStore = {
     return () => subs.delete(f);
   },
   load(name: string, bytes: Uint8Array, pageCount: number) {
+    clearCutoutImages();
     set({ ...empty, name, bytes, pageCount });
   },
   close() {
+    clearCutoutImages();
     set(empty);
   },
   toggleExcluded(page: number) {
@@ -46,7 +51,14 @@ export const pdfStore = {
   commit(ops: Record<number, Op[]>) {
     set({ past: [...state.past, state.ops].slice(-100), future: [], ops });
   },
+  setClipboard(clipboard: CutoutClipboard) { set({ clipboard }); },
+  updateOp(page: number, id: string, region: Region) {
+    const existing = state.ops[page]?.find(op => op.id === id);
+    if (!existing || existing.kind !== "image") return;
+    pdfStore.commit({ ...state.ops, [page]: (state.ops[page] ?? []).map(op => op.id === id ? { ...existing, ...region } : op) });
+  },
   addOp(page: number, op: Op) {
+    if (!Number.isInteger(page) || page < 1 || page > state.pageCount) return;
     pdfStore.commit({ ...state.ops, [page]: [...(state.ops[page] ?? []), op] });
   },
   removeOps(page: number, ids: string[]) {
@@ -71,6 +83,11 @@ export function usePdfStore() {
 
 export function drawOps(ctx: CanvasRenderingContext2D, ops: Op[], w: number, h: number) {
   for (const op of ops) {
+    if (op.kind === "image") {
+      const image = cutoutImage(op.data);
+      if (image) ctx.drawImage(image, op.x * w, op.y * h, op.w * w, op.h * h);
+      continue;
+    }
     if (op.kind === "rect") {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(op.x * w, op.y * h, op.w * w, op.h * h);
@@ -92,7 +109,7 @@ export function drawOps(ctx: CanvasRenderingContext2D, ops: Op[], w: number, h: 
   }
 }
 
-/** Builds a brand-new PDF. Pages with cutouts are flattened to images so the hidden content is truly gone. */
+/** Builds a brand-new PDF. Edited pages are flattened in displayed coordinates, preserving rotation and removing cut content. */
 export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
   const s = pdfStore.get();
   if (!s.bytes) throw new Error("No PDF loaded");
@@ -109,10 +126,11 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
     const p = keep[k];
     if (p === undefined) continue;
     const ops = s.ops[p] ?? [];
-    const hasCut = ops.some((o) => o.kind === "rect");
+    const hasEdits = ops.length > 0;
+    await Promise.all(ops.flatMap(op => op.kind === "image" ? [prepareCutout(op.data)] : []));
     const page = await view.getPage(p);
     const vp = page.getViewport({ scale: 1 });
-    if (hasCut) {
+    if (hasEdits) {
       const scale = 2.5;
       const v2 = page.getViewport({ scale });
       const c = document.createElement("canvas");
@@ -130,18 +148,8 @@ export async function exportEditedPdf(onP: (p: number) => void): Promise<Blob> {
     } else {
       const [copied] = await out.copyPages(src, [p - 1]);
       if (!copied) throw new Error("Unable to copy this page.");
-      const np = out.addPage(copied);
-      if (ops.length) {
-        const c = document.createElement("canvas");
-        c.width = Math.floor(vp.width * 2.5);
-        c.height = Math.floor(vp.height * 2.5);
-        const ctx = c.getContext("2d");
-        if (!ctx) throw new Error("Unable to render annotations.");
-        drawOps(ctx, ops, c.width, c.height);
-        const img = await out.embedPng(await toPng(c));
-        const { width, height } = np.getSize();
-        np.drawImage(img, { x: 0, y: 0, width, height });
-      }
+      out.addPage(copied);
+
     }
     onP((k + 1) / keep.length);
   }

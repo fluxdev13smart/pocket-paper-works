@@ -28,3 +28,8 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## PDF editing
+- Store edits as normalized page coordinates and cutout PNGs in session memory; this keeps zoom stable and avoids uploading private documents.
+- Flatten edited PDF pages using the rendered viewport on export; this preserves rotated markup and removes blanked source content from the exported file.
+- Keep region geometry and image preparation in the browser-safe PDF cutout helper; this isolates move/resize rules for regression tests.

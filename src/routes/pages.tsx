@@ -17,11 +17,13 @@ function Pages() {
         <OpenPdf title="Open a PDF to organize" hint="Deselect pages you don't want, then export from the Redact tab." />
       ) : (
         <main className="mx-auto max-w-[1000px] px-4 pt-10">
-          <h1 className="kit-display text-[28px] font-bold text-foreground">{s.name}</h1>
-          <div className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-4">
+          <h1 className="kit-display break-words text-[28px] font-bold text-foreground">{s.name}</h1>
+          <div role="region" aria-label="Page selection" tabIndex={0} className="mt-6 max-h-[65dvh] overflow-y-auto overscroll-contain pb-6">
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
             {doc && Array.from({ length: s.pageCount }, (_, i) => i + 1).map((p) => (
               <PageThumb key={p} doc={doc} page={p} excluded={s.excluded.includes(p)} onToggle={() => pdfStore.toggleExcluded(p)} />
             ))}
+          </div>
           </div>
         </main>
       )}
